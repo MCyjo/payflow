@@ -9,12 +9,6 @@ public interface IPaymentRepository
     void Add(Payment payment);
 }
 
-/// <summary>Records handled message ids so a redelivered message is not processed twice.</summary>
-public interface IInbox
-{
-    Task<bool> HasProcessedAsync(string messageId, CancellationToken ct);
-    void MarkProcessed(string messageId);
-}
 
 public interface IUnitOfWork
 {

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using PayFlow.Contracts;
 using PayFlow.Messaging;
 using PayFlow.OrderService.Application;
 using PayFlow.OrderService.Infrastructure.Persistence;
@@ -18,8 +19,13 @@ public static class DependencyInjection
         services.AddScoped<IOrderRepository, OrderRepository>();
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
 
+        services.AddScoped<ApplyPaymentResultHandler>();
+
         services.AddServiceBusMessaging(config);
         services.AddOutbox<OrderDbContext>();
+        services.AddInbox<OrderDbContext>("order-service");
+        services.AddSubscriptionConsumer<PaymentResultProcessor>(
+            MessagingNames.DomainEventsTopic, MessagingNames.Subscriptions.OrderService);
         return services;
     }
 }

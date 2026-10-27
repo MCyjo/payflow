@@ -3,6 +3,9 @@
     <Project Path="src/PayFlow.Contracts/PayFlow.Contracts.csproj" />
     <Project Path="src/PayFlow.Messaging/PayFlow.Messaging.csproj" />
   </Folder>
+  <Folder Name="/src/NotificationFunction/">
+    <Project Path="src/NotificationFunction/PayFlow.NotificationFunction.csproj" />
+  </Folder>
   <Folder Name="/src/OrderService/" />
   <Folder Name="/src/OrderService/Api/">
     <Project Path="src/OrderService/Api/PayFlow.OrderService.Api.csproj" />
@@ -33,6 +36,9 @@
     <Project Path="src/PaymentService/Infrastructure/PayFlow.PaymentService.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/tests/" />
+  <Folder Name="/tests/NotificationFunction.UnitTests/">
+    <Project Path="tests/NotificationFunction.UnitTests/PayFlow.NotificationFunction.UnitTests.csproj" />
+  </Folder>
   <Folder Name="/tests/OrderService.UnitTests/">
     <Project Path="tests/OrderService.UnitTests/PayFlow.OrderService.UnitTests.csproj" />
   </Folder>

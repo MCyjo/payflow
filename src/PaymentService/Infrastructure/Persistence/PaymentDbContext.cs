@@ -40,21 +40,6 @@ internal sealed class PaymentRepository(PaymentDbContext db) : IPaymentRepositor
     public void Add(Payment payment) => db.Payments.Add(payment);
 }
 
-internal sealed class EfInbox(PaymentDbContext db, TimeProvider clock) : IInbox
-{
-    public const string Consumer = "payment-service";
-
-    public Task<bool> HasProcessedAsync(string messageId, CancellationToken ct) =>
-        db.Set<ProcessedMessage>().AnyAsync(m => m.MessageId == messageId && m.Consumer == Consumer, ct);
-
-    public void MarkProcessed(string messageId) =>
-        db.Set<ProcessedMessage>().Add(new ProcessedMessage
-        {
-            MessageId = messageId,
-            Consumer = Consumer,
-            ProcessedAt = clock.GetUtcNow()
-        });
-}
 
 /// <summary>SaveChanges is one DB transaction: payment state, inbox record and outbox event commit together.</summary>
 internal sealed class EfUnitOfWork(PaymentDbContext db) : IUnitOfWork

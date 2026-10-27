@@ -54,6 +54,20 @@ internal sealed class EfOutbox<TContext>(TContext db) : IOutbox where TContext :
     }
 }
 
+internal sealed class EfInbox<TContext>(TContext db, TimeProvider clock, string consumer) : IInbox where TContext : DbContext
+{
+    public Task<bool> HasProcessedAsync(string messageId, CancellationToken ct) =>
+        db.Set<ProcessedMessage>().AnyAsync(m => m.MessageId == messageId && m.Consumer == consumer, ct);
+
+    public void MarkProcessed(string messageId) =>
+        db.Set<ProcessedMessage>().Add(new ProcessedMessage
+        {
+            MessageId = messageId,
+            Consumer = consumer,
+            ProcessedAt = clock.GetUtcNow()
+        });
+}
+
 /// <summary>
 /// Relays outbox rows to Service Bus. Delivery is at-least-once: a crash after send but before commit
 /// re-publishes the row. That is safe because MessageId == EventId (broker duplicate detection)

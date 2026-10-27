@@ -42,6 +42,14 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>Registers <see cref="IInbox"/> over the context, scoped to one logical consumer. Requires a TimeProvider.</summary>
+    public static IServiceCollection AddInbox<TContext>(this IServiceCollection services, string consumer) where TContext : DbContext
+    {
+        services.AddScoped<IInbox>(sp => new EfInbox<TContext>(
+            sp.GetRequiredService<TContext>(), sp.GetRequiredService<TimeProvider>(), consumer));
+        return services;
+    }
+
     public static IServiceCollection AddSubscriptionConsumer<TProcessor>(
         this IServiceCollection services, string topic, string subscription)
         where TProcessor : class, IMessageProcessor

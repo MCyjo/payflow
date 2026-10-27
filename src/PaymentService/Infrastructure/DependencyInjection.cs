@@ -21,7 +21,7 @@ public static class DependencyInjection
                 n => n.MigrationsAssembly(typeof(PaymentDbContext).Assembly.GetName().Name)));
 
         services.AddScoped<IPaymentRepository, PaymentRepository>();
-        services.AddScoped<IInbox, EfInbox>();
+        services.AddInbox<PaymentDbContext>("payment-service");
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
         services.AddScoped<ProcessPaymentHandler>();
         services.AddScoped<ProviderWebhookHandler>();
