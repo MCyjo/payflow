@@ -10,3 +10,5 @@ obj/
 *.tfvars
 local.settings.json
 TestResults/
+*.out
+*.err
