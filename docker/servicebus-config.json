@@ -1,0 +1,69 @@
+{
+  "UserConfig": {
+    "Namespaces": [
+      {
+        "Name": "sbemulatorns",
+        "Queues": [
+          {
+            "Name": "payment-commands",
+            "Properties": {
+              "DeadLetteringOnMessageExpiration": true,
+              "DefaultMessageTimeToLive": "PT1H",
+              "LockDuration": "PT1M",
+              "MaxDeliveryCount": 5,
+              "RequiresDuplicateDetection": true,
+              "DuplicateDetectionHistoryTimeWindow": "PT10M"
+            }
+          }
+        ],
+        "Topics": [
+          {
+            "Name": "domain-events",
+            "Properties": {
+              "DefaultMessageTimeToLive": "PT1H",
+              "RequiresDuplicateDetection": true,
+              "DuplicateDetectionHistoryTimeWindow": "PT10M"
+            },
+            "Subscriptions": [
+              {
+                "Name": "payment-service",
+                "Properties": { "MaxDeliveryCount": 5, "LockDuration": "PT1M", "DeadLetteringOnMessageExpiration": true },
+                "Rules": [
+                  {
+                    "Name": "order-created",
+                    "Properties": { "FilterType": "Sql", "SqlFilter": { "SqlExpression": "sys.Label = 'OrderCreated'" } }
+                  }
+                ]
+              },
+              {
+                "Name": "order-service",
+                "Properties": { "MaxDeliveryCount": 5, "LockDuration": "PT1M", "DeadLetteringOnMessageExpiration": true },
+                "Rules": [
+                  {
+                    "Name": "payment-results",
+                    "Properties": { "FilterType": "Sql", "SqlFilter": { "SqlExpression": "sys.Label IN ('PaymentCompleted','PaymentFailed')" } }
+                  }
+                ]
+              },
+              {
+                "Name": "notification-function",
+                "Properties": { "MaxDeliveryCount": 5, "LockDuration": "PT1M", "DeadLetteringOnMessageExpiration": true },
+                "Rules": [
+                  {
+                    "Name": "payment-results",
+                    "Properties": { "FilterType": "Sql", "SqlFilter": { "SqlExpression": "sys.Label IN ('PaymentCompleted','PaymentFailed')" } }
+                  }
+                ]
+              },
+              {
+                "Name": "audit",
+                "Properties": { "MaxDeliveryCount": 5, "LockDuration": "PT1M" }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "Logging": { "Type": "File" }
+  }
+}

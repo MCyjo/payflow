@@ -1,0 +1,22 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PayFlow.Contracts/PayFlow.Contracts.csproj" />
+  </Folder>
+  <Folder Name="/src/OrderService/" />
+  <Folder Name="/src/OrderService/Api/">
+    <Project Path="src/OrderService/Api/PayFlow.OrderService.Api.csproj" />
+  </Folder>
+  <Folder Name="/src/OrderService/Application/">
+    <Project Path="src/OrderService/Application/PayFlow.OrderService.Application.csproj" />
+  </Folder>
+  <Folder Name="/src/OrderService/Domain/">
+    <Project Path="src/OrderService/Domain/PayFlow.OrderService.Domain.csproj" />
+  </Folder>
+  <Folder Name="/src/OrderService/Infrastructure/">
+    <Project Path="src/OrderService/Infrastructure/PayFlow.OrderService.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/" />
+  <Folder Name="/tests/OrderService.UnitTests/">
+    <Project Path="tests/OrderService.UnitTests/PayFlow.OrderService.UnitTests.csproj" />
+  </Folder>
+</Solution>
