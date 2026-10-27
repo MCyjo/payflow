@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using PayFlow.PaymentProviderSimulator;
+using PayFlow.ServiceDefaults;
 
 // Fake payment provider modelled on Stripe/Adyen. The test token in the request decides the outcome:
 //   tok_success             200 succeeded
@@ -12,6 +13,7 @@ using PayFlow.PaymentProviderSimulator;
 //   tok_async_declined      202, then a "failed" webhook
 //   tok_duplicate_webhook   202, then the same "completed" webhook twice (proves idempotent webhook handling)
 var builder = WebApplication.CreateBuilder(args);
+builder.AddPayFlowServiceDefaults("payment-provider-simulator");
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<WebhookSender>();
 var app = builder.Build();

@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Infrastructure\PayFlow.OrderService.Infrastructure.csproj" />
     <ProjectReference Include="..\Application\PayFlow.OrderService.Application.csproj" />
+    <ProjectReference Include="..\..\PayFlow.ServiceDefaults\PayFlow.ServiceDefaults.csproj" />
   </ItemGroup>
 
   <ItemGroup>

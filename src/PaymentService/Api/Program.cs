@@ -5,13 +5,15 @@ using Microsoft.EntityFrameworkCore;
 using PayFlow.PaymentService.Application;
 using PayFlow.PaymentService.Infrastructure;
 using PayFlow.PaymentService.Infrastructure.Persistence;
+using PayFlow.ServiceDefaults;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.AddPayFlowServiceDefaults("payment-service");
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddPaymentInfrastructure(builder.Configuration);
 builder.Services.AddProblemDetails();
-builder.Services.AddHealthChecks().AddDbContextCheck<PaymentDbContext>("postgres");
+builder.Services.AddHealthChecks().AddDbContextCheck<PaymentDbContext>("postgres", tags: [ServiceDefaultsExtensions.ReadyTag]);
 
 var app = builder.Build();
 
@@ -24,7 +26,7 @@ if (app.Environment.IsDevelopment())
     await scope.ServiceProvider.GetRequiredService<PaymentDbContext>().Database.MigrateAsync();
 }
 
-app.MapHealthChecks("/health");
+app.MapPayFlowHealthChecks();
 
 app.MapGet("/api/payments/by-order/{orderId:guid}", async (Guid orderId, IPaymentRepository payments, CancellationToken ct) =>
     await payments.GetByOrderIdAsync(orderId, ct) is { } p

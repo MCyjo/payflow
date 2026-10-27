@@ -59,6 +59,49 @@ cp src/NotificationFunction/local.settings.json.example src/NotificationFunction
 cd src/NotificationFunction && func start
 ```
 
+### Observability
+
+All services share `PayFlow.ServiceDefaults` (OpenTelemetry traces, metrics and logs). Exporters are chosen by
+configuration, so the same build runs locally and in Azure:
+
+| Setting | Exporter |
+|---|---|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` (set in `appsettings.Development.json`) | OTLP -> Aspire Dashboard at http://localhost:18888 |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Azure Monitor / Application Insights |
+| `Telemetry__Console=true` | spans printed to stdout |
+
+**One trace per order.** The W3C `traceparent` travels with the message (Service Bus application property, also as
+`Diagnostic-Id` so Azure Functions joins the same trace). The outbox stores the trace context next to the event, so
+the relay's publish span continues the original HTTP request's trace even though it runs later on another thread:
+
+```
+POST /api/orders -> postgresql -> domain-events publish -> payment-service process -> POST /payments (provider)
+  -> domain-events publish -> order-service process
+```
+
+Custom metrics (meter `PayFlow.Messaging`): `payflow.outbox.published`, `payflow.outbox.publish_failures`,
+`payflow.messages.processed` (by subscription and outcome `success` / `abandoned` / `dead_lettered`) and
+`payflow.messages.processing_duration`. Every log line carries `CorrelationId` (and `MessageId` in consumers).
+
+Health endpoints: `/health/live` (process only, for Kubernetes liveness) and `/health/ready` (database, for readiness).
+On shutdown the host waits up to 30 s for in-flight handlers, and the outbox relay always commits what it already sent.
+
+### Dead-letter queue tooling
+
+A message is dead-lettered after 5 failed deliveries (`MaxDeliveryCountExceeded`) or immediately when it can never
+succeed (`PermanentFailure`, e.g. malformed payload). `tools/PayFlow.DlqTool` inspects and repairs them:
+
+```bash
+export SERVICEBUS_CONNECTION_STRING="Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;"
+dotnet run --project tools/PayFlow.DlqTool -- send-poison              # publish a malformed OrderCreated
+dotnet run --project tools/PayFlow.DlqTool -- peek payment-service     # reason, delivery count, body
+dotnet run --project tools/PayFlow.DlqTool -- resubmit payment-service # back to the topic, then removed from the DLQ
+dotnet run --project tools/PayFlow.DlqTool -- purge payment-service
+```
+
+Resubmit keeps the original `MessageId`, so consumers' inbox tables recognise anything they already handled
+(`--new-id` overrides this when still inside the topic's duplicate-detection window).
+
 ### Order lifecycle
 
 `POST /api/orders` -> `OrderCreated` (outbox) -> Payment Service charges the provider -> `PaymentCompleted` /

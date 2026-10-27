@@ -4,8 +4,10 @@ using PayFlow.OrderService.Application;
 using PayFlow.OrderService.Domain;
 using PayFlow.OrderService.Infrastructure;
 using PayFlow.OrderService.Infrastructure.Persistence;
+using PayFlow.ServiceDefaults;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.AddPayFlowServiceDefaults("order-service");
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton(TimeProvider.System);
@@ -15,7 +17,7 @@ builder.Services.AddScoped<GetOrderHandler>();
 builder.Services.AddScoped<CancelOrderHandler>();
 builder.Services.AddOrderInfrastructure(builder.Configuration);
 builder.Services.AddProblemDetails();
-builder.Services.AddHealthChecks().AddDbContextCheck<OrderDbContext>("postgres");
+builder.Services.AddHealthChecks().AddDbContextCheck<OrderDbContext>("postgres", tags: [ServiceDefaultsExtensions.ReadyTag]);
 
 var app = builder.Build();
 
@@ -29,7 +31,7 @@ if (app.Environment.IsDevelopment())
     await scope.ServiceProvider.GetRequiredService<OrderDbContext>().Database.MigrateAsync();
 }
 
-app.MapHealthChecks("/health");
+app.MapPayFlowHealthChecks();
 
 var orders = app.MapGroup("/api/orders");
 

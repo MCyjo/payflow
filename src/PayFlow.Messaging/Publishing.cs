@@ -18,7 +18,35 @@ internal sealed class ServiceBusEventPublisher(ServiceBusClient client) : IEvent
 {
     private readonly ServiceBusSender _sender = client.CreateSender(MessagingNames.DomainEventsTopic);
 
-    public Task PublishAsync(OutboxMessage message, CancellationToken ct)
+    public async Task PublishAsync(OutboxMessage message, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+
+        // The span continues the trace of whoever enqueued the event (HTTP request or message handler),
+        // however much later the relay runs.
+        _ = ActivityContext.TryParse(message.TraceParent, null, out var parent);
+        using var activity = MessagingTelemetry.Source.StartActivity(
+            $"{MessagingNames.DomainEventsTopic} publish", ActivityKind.Producer, parent);
+        activity?.SetTag("messaging.system", "servicebus");
+        activity?.SetTag("messaging.destination.name", MessagingNames.DomainEventsTopic);
+        activity?.SetTag("messaging.message.id", message.Id.ToString());
+        activity?.SetTag("payflow.event_type", message.Type);
+        activity?.SetTag("payflow.correlation_id", message.CorrelationId);
+
+        try
+        {
+            await _sender.SendMessageAsync(BuildMessage(message, activity), ct);
+            MessagingTelemetry.OutboxPublished.Add(1, new KeyValuePair<string, object?>("event_type", message.Type));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            MessagingTelemetry.OutboxPublishFailures.Add(1, new KeyValuePair<string, object?>("event_type", message.Type));
+            throw;
+        }
+    }
+
+    internal static ServiceBusMessage BuildMessage(OutboxMessage message, Activity? publishActivity)
     {
         var msg = new ServiceBusMessage(message.Payload)
         {
@@ -29,9 +57,14 @@ internal sealed class ServiceBusEventPublisher(ServiceBusClient client) : IEvent
         };
         msg.ApplicationProperties["eventType"] = message.Type;
         msg.ApplicationProperties["occurredAt"] = message.OccurredAt.ToString("O");
-        if (message.TraceParent is not null) msg.ApplicationProperties["traceparent"] = message.TraceParent;
 
-        return _sender.SendMessageAsync(msg, ct);
+        var traceParent = publishActivity?.Id ?? message.TraceParent;
+        if (traceParent is not null)
+        {
+            msg.ApplicationProperties[TelemetryNames.TraceParentProperty] = traceParent;
+            msg.ApplicationProperties[TelemetryNames.DiagnosticIdProperty] = traceParent;
+        }
+        return msg;
     }
 
     public ValueTask DisposeAsync() => _sender.DisposeAsync();
@@ -139,8 +172,10 @@ internal sealed partial class OutboxPublisherService<TContext>(
             }
         }
 
-        await db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
+        // Deliberately not cancellable: messages already sent must be marked as processed even while the host is
+        // shutting down, otherwise a graceful stop would needlessly re-publish them.
+        await db.SaveChangesAsync(CancellationToken.None);
+        await tx.CommitAsync(CancellationToken.None);
         return published;
     }
 

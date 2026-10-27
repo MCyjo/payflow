@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Azure.Messaging.ServiceBus;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -51,23 +52,53 @@ internal sealed partial class SubscriptionConsumerService<TProcessor>(
     private async Task HandleAsync(ProcessMessageEventArgs args)
     {
         var message = args.Message;
+
+        // Continue the sender's trace: this span is a child of the publisher's span.
+        using var activity = MessagingTelemetry.Source.StartActivity(
+            $"{subscription} process", ActivityKind.Consumer, MessagingTelemetry.ExtractParent(message));
+        activity?.SetTag("messaging.system", "servicebus");
+        activity?.SetTag("messaging.destination.name", $"{topic}/{subscription}");
+        activity?.SetTag("messaging.message.id", message.MessageId);
+        activity?.SetTag("messaging.message.delivery_count", message.DeliveryCount);
+        activity?.SetTag("payflow.event_type", message.Subject);
+        activity?.SetTag("payflow.correlation_id", message.CorrelationId);
+
         using var logScope = logger.BeginScope(new Dictionary<string, object>
         {
             ["MessageId"] = message.MessageId,
             ["CorrelationId"] = message.CorrelationId ?? string.Empty
         });
 
-        await using var scope = scopes.CreateAsyncScope();
-        var handler = scope.ServiceProvider.GetRequiredService<TProcessor>();
+        var started = Stopwatch.GetTimestamp();
+        var outcome = "success";
         try
         {
+            await using var scope = scopes.CreateAsyncScope();
+            var handler = scope.ServiceProvider.GetRequiredService<TProcessor>();
             await handler.ProcessAsync(message, args.CancellationToken);
         }
         catch (PermanentMessageException ex)
         {
+            outcome = "dead_lettered";
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             LogDeadLettered(ex, message.MessageId);
             await args.DeadLetterMessageAsync(message, deadLetterReason: "PermanentFailure",
                 deadLetterErrorDescription: ex.Message, cancellationToken: args.CancellationToken);
+        }
+        catch (Exception ex)
+        {
+            outcome = "abandoned"; // the SDK abandons the message; the broker redelivers it, then dead-letters it
+            activity?.AddException(ex);
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            throw;
+        }
+        finally
+        {
+            MessagingTelemetry.MessagesProcessed.Add(1,
+                new KeyValuePair<string, object?>("subscription", subscription),
+                new KeyValuePair<string, object?>("outcome", outcome));
+            MessagingTelemetry.ProcessingDuration.Record(Stopwatch.GetElapsedTime(started).TotalMilliseconds,
+                new KeyValuePair<string, object?>("subscription", subscription));
         }
     }
 

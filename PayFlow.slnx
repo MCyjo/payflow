@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/PayFlow.Contracts/PayFlow.Contracts.csproj" />
     <Project Path="src/PayFlow.Messaging/PayFlow.Messaging.csproj" />
+    <Project Path="src/PayFlow.ServiceDefaults/PayFlow.ServiceDefaults.csproj" />
   </Folder>
   <Folder Name="/src/NotificationFunction/">
     <Project Path="src/NotificationFunction/PayFlow.NotificationFunction.csproj" />
@@ -36,6 +37,9 @@
     <Project Path="src/PaymentService/Infrastructure/PayFlow.PaymentService.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/tests/" />
+  <Folder Name="/tests/Messaging.UnitTests/">
+    <Project Path="tests/Messaging.UnitTests/PayFlow.Messaging.UnitTests.csproj" />
+  </Folder>
   <Folder Name="/tests/NotificationFunction.UnitTests/">
     <Project Path="tests/NotificationFunction.UnitTests/PayFlow.NotificationFunction.UnitTests.csproj" />
   </Folder>
@@ -44,5 +48,8 @@
   </Folder>
   <Folder Name="/tests/PaymentService.UnitTests/">
     <Project Path="tests/PaymentService.UnitTests/PayFlow.PaymentService.UnitTests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/PayFlow.DlqTool/PayFlow.DlqTool.csproj" />
   </Folder>
 </Solution>
