@@ -3,7 +3,7 @@ using PayFlow.OrderService.Domain;
 
 namespace PayFlow.OrderService.Application;
 
-public sealed record CreateOrderCommand(Guid CustomerId, decimal Amount, string Currency, string? IdempotencyKey);
+public sealed record CreateOrderCommand(Guid CustomerId, decimal Amount, string Currency, string PaymentToken, string? IdempotencyKey);
 
 public sealed record OrderDto(Guid Id, Guid CustomerId, decimal Amount, string Currency, string Status, DateTimeOffset CreatedAt);
 
@@ -35,7 +35,7 @@ public sealed class CreateOrderHandler(
 
         // Order + OutboxMessage are saved in ONE transaction (see OrderDbContext).
         outbox.Enqueue(
-            new OrderCreated(Guid.NewGuid(), now, order.Id, order.CustomerId, order.Amount, order.Currency),
+            new OrderCreated(Guid.NewGuid(), now, order.Id, order.CustomerId, order.Amount, order.Currency, cmd.PaymentToken),
             correlation.CorrelationId);
 
         await uow.SaveChangesAsync(ct);

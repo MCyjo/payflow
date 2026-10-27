@@ -12,7 +12,7 @@
               "LockDuration": "PT1M",
               "MaxDeliveryCount": 5,
               "RequiresDuplicateDetection": true,
-              "DuplicateDetectionHistoryTimeWindow": "PT10M"
+              "DuplicateDetectionHistoryTimeWindow": "PT5M"
             }
           }
         ],
@@ -22,7 +22,7 @@
             "Properties": {
               "DefaultMessageTimeToLive": "PT1H",
               "RequiresDuplicateDetection": true,
-              "DuplicateDetectionHistoryTimeWindow": "PT10M"
+              "DuplicateDetectionHistoryTimeWindow": "PT5M"
             },
             "Subscriptions": [
               {

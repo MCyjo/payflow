@@ -39,7 +39,7 @@ orders.MapPost("/", async (CreateOrderRequest req, HttpContext http, CreateOrder
     try
     {
         var (order, created) = await handler.HandleAsync(
-            new CreateOrderCommand(req.CustomerId, req.Amount, req.Currency, key), ct);
+            new CreateOrderCommand(req.CustomerId, req.Amount, req.Currency, req.PaymentToken ?? "tok_success", key), ct);
 
         return created
             ? Results.Created($"/api/orders/{order.Id}", order)

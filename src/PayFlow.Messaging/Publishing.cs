@@ -1,19 +1,67 @@
+using System.Diagnostics;
+using System.Text.Json;
+using Azure.Messaging.ServiceBus;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using PayFlow.OrderService.Infrastructure.Persistence;
+using PayFlow.Contracts;
 
-namespace PayFlow.OrderService.Infrastructure.Messaging;
+namespace PayFlow.Messaging;
+
+public interface IEventPublisher
+{
+    Task PublishAsync(OutboxMessage message, CancellationToken ct);
+}
+
+internal sealed class ServiceBusEventPublisher(ServiceBusClient client) : IEventPublisher, IAsyncDisposable
+{
+    private readonly ServiceBusSender _sender = client.CreateSender(MessagingNames.DomainEventsTopic);
+
+    public Task PublishAsync(OutboxMessage message, CancellationToken ct)
+    {
+        var msg = new ServiceBusMessage(message.Payload)
+        {
+            MessageId = message.Id.ToString(),      // enables broker-side duplicate detection
+            Subject = message.Type,                 // subscription filters match on this
+            CorrelationId = message.CorrelationId,
+            ContentType = "application/json"
+        };
+        msg.ApplicationProperties["eventType"] = message.Type;
+        msg.ApplicationProperties["occurredAt"] = message.OccurredAt.ToString("O");
+        if (message.TraceParent is not null) msg.ApplicationProperties["traceparent"] = message.TraceParent;
+
+        return _sender.SendMessageAsync(msg, ct);
+    }
+
+    public ValueTask DisposeAsync() => _sender.DisposeAsync();
+}
+
+internal sealed class EfOutbox<TContext>(TContext db) : IOutbox where TContext : DbContext
+{
+    public void Enqueue(IDomainEvent domainEvent, string correlationId)
+    {
+        ArgumentNullException.ThrowIfNull(domainEvent);
+        db.Set<OutboxMessage>().Add(new OutboxMessage
+        {
+            Id = domainEvent.EventId,
+            Type = domainEvent.EventType,
+            Payload = JsonSerializer.Serialize(domainEvent, domainEvent.GetType(), JsonSerializerOptions.Web),
+            CorrelationId = correlationId,
+            TraceParent = Activity.Current?.Id,
+            OccurredAt = domainEvent.OccurredAt
+        });
+    }
+}
 
 /// <summary>
 /// Relays outbox rows to Service Bus. Delivery is at-least-once: a crash after send but before commit
 /// re-publishes the row. That is safe because MessageId == EventId (broker duplicate detection)
 /// and consumers are idempotent (inbox table).
 /// </summary>
-internal sealed partial class OutboxPublisherService(
+internal sealed partial class OutboxPublisherService<TContext>(
     IServiceScopeFactory scopes,
-    ILogger<OutboxPublisherService> logger) : BackgroundService
+    ILogger<OutboxPublisherService<TContext>> logger) : BackgroundService where TContext : DbContext
 {
     private const int BatchSize = 20;
     private static readonly TimeSpan IdleDelay = TimeSpan.FromSeconds(1);
@@ -43,13 +91,13 @@ internal sealed partial class OutboxPublisherService(
     private async Task<int> PublishBatchAsync(CancellationToken ct)
     {
         await using var scope = scopes.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<OrderDbContext>();
+        var db = scope.ServiceProvider.GetRequiredService<TContext>();
         var publisher = scope.ServiceProvider.GetRequiredService<IEventPublisher>();
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 
         // SKIP LOCKED lets several replicas drain the outbox concurrently without double-publishing.
-        var batch = await db.OutboxMessages
+        var batch = await db.Set<OutboxMessage>()
             .FromSqlRaw($"""
                 SELECT * FROM "OutboxMessages"
                 WHERE "ProcessedAt" IS NULL

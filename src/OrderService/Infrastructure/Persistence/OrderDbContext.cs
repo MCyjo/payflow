@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using PayFlow.Messaging;
 using PayFlow.OrderService.Domain;
 
 namespace PayFlow.OrderService.Infrastructure.Persistence;
@@ -6,7 +7,6 @@ namespace PayFlow.OrderService.Infrastructure.Persistence;
 public sealed class OrderDbContext(DbContextOptions<OrderDbContext> options) : DbContext(options)
 {
     public DbSet<Order> Orders => Set<Order>();
-    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -23,17 +23,6 @@ public sealed class OrderDbContext(DbContextOptions<OrderDbContext> options) : D
             e.HasIndex(x => x.CustomerId);
         });
 
-        modelBuilder.Entity<OutboxMessage>(e =>
-        {
-            e.ToTable("OutboxMessages");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.Id).ValueGeneratedNever();
-            e.Property(x => x.Type).HasMaxLength(100);
-            e.Property(x => x.Payload).HasColumnType("jsonb");
-            e.Property(x => x.CorrelationId).HasMaxLength(100);
-            e.Property(x => x.TraceParent).HasMaxLength(100);
-            // Partial index: the publisher only ever scans unprocessed rows.
-            e.HasIndex(x => x.OccurredAt).HasFilter("\"ProcessedAt\" IS NULL");
-        });
+        modelBuilder.AddMessagingTables();
     }
 }

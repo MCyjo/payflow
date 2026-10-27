@@ -38,7 +38,7 @@ public class CreateOrderHandlerTests
         var customer = Guid.NewGuid();
 
         var (dto, created) = await Handler(store).HandleAsync(
-            new CreateOrderCommand(customer, 149.99m, "EUR", null), CancellationToken.None);
+            new CreateOrderCommand(customer, 149.99m, "EUR", "tok_success", null), CancellationToken.None);
 
         Assert.True(created);
         Assert.Equal(1, store.Saves);
@@ -53,7 +53,7 @@ public class CreateOrderHandlerTests
     public async Task Handle_SameIdempotencyKey_ReturnsExistingOrderWithoutSecondEvent()
     {
         var store = new FakeStore();
-        var cmd = new CreateOrderCommand(Guid.NewGuid(), 10m, "EUR", "key-1");
+        var cmd = new CreateOrderCommand(Guid.NewGuid(), 10m, "EUR", "tok_success", "key-1");
 
         var first = await Handler(store).HandleAsync(cmd, CancellationToken.None);
         var second = await Handler(store).HandleAsync(cmd, CancellationToken.None);
@@ -71,7 +71,7 @@ public class CreateOrderHandlerTests
         var store = new FakeStore();
 
         await Assert.ThrowsAsync<DomainException>(() => Handler(store).HandleAsync(
-            new CreateOrderCommand(Guid.NewGuid(), -1m, "EUR", null), CancellationToken.None));
+            new CreateOrderCommand(Guid.NewGuid(), -1m, "EUR", "tok_success", null), CancellationToken.None));
 
         Assert.Equal(0, store.Saves);
         Assert.Empty(store.Outbox);

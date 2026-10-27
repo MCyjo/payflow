@@ -14,7 +14,8 @@ public sealed record OrderCreated(
     Guid OrderId,
     Guid CustomerId,
     decimal Amount,
-    string Currency) : IDomainEvent
+    string Currency,
+    string PaymentToken) : IDomainEvent
 {
     public const string Type = nameof(OrderCreated);
     public string EventType => Type;

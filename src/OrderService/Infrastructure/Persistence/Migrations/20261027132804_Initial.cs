@@ -48,6 +48,19 @@ namespace PayFlow.OrderService.Infrastructure.Persistence.Migrations
                     table.PrimaryKey("PK_OutboxMessages", x => x.Id);
                 });
 
+            migrationBuilder.CreateTable(
+                name: "ProcessedMessages",
+                columns: table => new
+                {
+                    MessageId = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    Consumer = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    ProcessedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ProcessedMessages", x => new { x.MessageId, x.Consumer });
+                });
+
             migrationBuilder.CreateIndex(
                 name: "IX_Orders_CustomerId",
                 table: "Orders",
@@ -74,6 +87,9 @@ namespace PayFlow.OrderService.Infrastructure.Persistence.Migrations
 
             migrationBuilder.DropTable(
                 name: "OutboxMessages");
+
+            migrationBuilder.DropTable(
+                name: "ProcessedMessages");
         }
     }
 }
