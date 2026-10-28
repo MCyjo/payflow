@@ -16,6 +16,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddPayFlowServiceDefaults("payment-provider-simulator");
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<WebhookSender>();
+builder.Services.AddHealthChecks();
 var app = builder.Build();
 
 // Idempotency store: the same Idempotency-Key always returns the same final response, charge happens once.
@@ -23,6 +24,7 @@ var responses = new ConcurrentDictionary<string, StoredResponse>();
 var attempts = new ConcurrentDictionary<string, int>();
 
 app.MapGet("/health", () => Results.Ok());
+app.MapPayFlowHealthChecks(); // /health/live and /health/ready: the paths the Kubernetes probes use
 
 app.MapPost("/payments", async (ChargeRequest request, HttpRequest http, WebhookSender webhooks, IConfiguration config) =>
 {

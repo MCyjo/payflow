@@ -63,7 +63,17 @@ if ($account.state -ne 'Enabled') {
 $answer = Read-Host 'Is this YOUR personal subscription (not your employer''s)? Type yes to continue'
 if ($answer -ne 'yes') { throw 'Aborted. Run `az login` with the right account and try again.' }
 
-$subject = if ($Environment) { "repo:${GitHubRepo}:environment:$Environment" } else { "repo:${GitHubRepo}:ref:refs/heads/$Branch" }
+# The subject GitHub puts in its token depends on a repository setting: repositories created recently use immutable ids
+# ("repo:OWNER@OWNERID/NAME@REPOID:...", AADSTS700213 if you trust the plain name instead), older ones use "repo:OWNER/NAME:...".
+# Ask GitHub which prefix it will present rather than guessing.
+$prefix = "repo:$GitHubRepo"
+$custom = (gh api "repos/$GitHubRepo/actions/oidc/customization/sub" 2>$null) -join ''
+if ($LASTEXITCODE -eq 0 -and $custom) {
+    $configured = ($custom | ConvertFrom-Json).sub_claim_prefix
+    if ($configured) { $prefix = $configured }
+}
+$subject = if ($Environment) { "${prefix}:environment:$Environment" } else { "${prefix}:ref:refs/heads/$Branch" }
+$credentialName = if ($prefix -eq "repo:$GitHubRepo") { 'github-actions' } else { 'github-actions-immutable' }
 
 # --- app registration + service principal (idempotent: reuse when it already exists) ---------------------------
 $appId = Invoke-Az ad app list --display-name $AppName --query '[0].appId' -o tsv
@@ -75,7 +85,7 @@ if (-not $spId) { $spId = Invoke-Az ad sp create --id $appId --query id -o tsv }
 $existing = Invoke-Az ad app federated-credential list --id $appId --query "[?subject=='$subject'].name" -o tsv
 if (-not $existing) {
     $body = @{
-        name      = 'github-actions'
+        name      = $credentialName
         issuer    = 'https://token.actions.githubusercontent.com'
         subject   = $subject
         audiences = @('api://AzureADTokenExchange')

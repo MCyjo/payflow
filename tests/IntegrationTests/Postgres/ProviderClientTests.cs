@@ -73,6 +73,20 @@ public sealed class ProviderClientTests : IAsyncLifetime
         Assert.True(DateTimeOffset.UtcNow - started < TimeSpan.FromSeconds(25), "the timeout policy did not cut the call short");
     }
 
+    [Theory]
+    [InlineData("/health/live")]
+    [InlineData("/health/ready")]
+    public async Task Simulator_ExposesTheProbeEndpointsKubernetesUses(string path)
+    {
+        // The manifests probe /health/live and /health/ready on every service. The simulator once only had /health,
+        // so the cluster restarted it forever (HTTP 404 on the startup probe).
+        using var client = _simulator.CreateClient();
+
+        using var response = await client.GetAsync(path);
+
+        Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+    }
+
     [Fact]
     public async Task RepeatingAChargeWithTheSameIdempotencyKey_ReturnsTheSameResult()
     {
