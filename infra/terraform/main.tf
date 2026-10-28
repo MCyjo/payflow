@@ -39,12 +39,23 @@ module "messaging" {
   tags                = local.tags
 }
 
+# Server names are bound to the region where the name was first used, even after a failed allocation there.
+# Keying the suffix to the region lets the database move without renaming anything else.
+resource "random_string" "postgres_suffix" {
+  length  = 4
+  upper   = false
+  special = false
+  keepers = {
+    location = coalesce(var.postgres_location, var.location)
+  }
+}
+
 module "data" {
   source = "./modules/data"
 
-  name                = "psql-${local.base_name}-${random_string.suffix.result}"
+  name                = "psql-${local.base_name}-${random_string.postgres_suffix.result}"
   resource_group_name = azurerm_resource_group.this.name
-  location            = var.location
+  location            = coalesce(var.postgres_location, var.location)
   sku_name            = var.postgres_sku
   tags                = local.tags
 }

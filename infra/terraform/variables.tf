@@ -18,7 +18,7 @@ variable "environment" {
 variable "location" {
   description = "Azure region. Check that the region offers the PostgreSQL SKU and has vCPU quota for the AKS node size."
   type        = string
-  default     = "westeurope"
+  default     = "swedencentral"
 }
 
 variable "deploy_aks" {
@@ -53,4 +53,13 @@ variable "k8s_namespace" {
   description = "Kubernetes namespace the services run in (part of the federated credential subject)."
   type        = string
   default     = "payflow"
+}
+
+variable "postgres_location" {
+  description = <<-EOT
+    Region for PostgreSQL only; defaults to `location`. Burstable SKUs are sometimes out of capacity in a region
+    (RegionalAllocationFailed), and the database can live elsewhere at the cost of a little cross-region latency.
+  EOT
+  type        = string
+  default     = null
 }

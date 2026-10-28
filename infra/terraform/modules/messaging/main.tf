@@ -65,31 +65,17 @@ resource "azurerm_servicebus_subscription" "this" {
   dead_lettering_on_message_expiration = true
 }
 
-# Every subscription is created with a rule named "$Default" that accepts all messages. Adding a second rule
-# next to it would leave the subscription unfiltered, and azurerm has no resource for replacing it. An ARM
-# deployment can PUT the rule under the same name, which overwrites the filter in place.
-resource "azurerm_resource_group_template_deployment" "subscription_filters" {
-  name                = "${var.name}-subscription-filters"
-  resource_group_name = var.resource_group_name
-  deployment_mode     = "Incremental"
+# Service Bus gives every subscription a built-in "$Default" rule that accepts all messages. Adding a rule of your own
+# makes the broker drop it (checked on a live namespace), so a plain named rule is enough to get real filtering.
+# Replacing "$Default" itself, e.g. with an ARM deployment, deletes it and leaves the subscription with no rules at all:
+# it then receives nothing.
+resource "azurerm_servicebus_subscription_rule" "by_event_type" {
+  for_each = local.filtered_subscriptions
 
-  template_content = jsonencode({
-    "$schema"      = "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#"
-    contentVersion = "1.0.0.0"
-    resources = [
-      for sub, filter in local.filtered_subscriptions : {
-        type       = "Microsoft.ServiceBus/namespaces/topics/subscriptions/rules"
-        apiVersion = "2022-10-01-preview"
-        name       = "${azurerm_servicebus_namespace.this.name}/${local.topic_name}/${sub}/$Default"
-        properties = {
-          filterType = "SqlFilter"
-          sqlFilter  = { sqlExpression = filter }
-        }
-      }
-    ]
-  })
-
-  depends_on = [azurerm_servicebus_subscription.this]
+  name            = "by-event-type"
+  subscription_id = azurerm_servicebus_subscription.this[each.key].id
+  filter_type     = "SqlFilter"
+  sql_filter      = each.value
 }
 
 output "namespace_id" { value = azurerm_servicebus_namespace.this.id }

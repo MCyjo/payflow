@@ -1,0 +1,120 @@
+<#
+.SYNOPSIS
+  Lets GitHub Actions deploy to your Azure subscription without any stored secret (OIDC federation).
+
+.DESCRIPTION
+  Creates an Entra ID app registration + service principal and trusts tokens that GitHub issues for ONE specific
+  workflow context of ONE repository. There is no client secret and no certificate: GitHub proves who is calling
+  with a short-lived token, Azure checks the repository and branch inside it, and hands back an access token.
+
+  Run after `az login` (to YOUR Azure account) and after bootstrap-state.ps1.
+  Safe to re-run: existing objects are reused. Stops at the first failing az command.
+
+.PARAMETER GitHubRepo
+  owner/name of the repository.
+
+.PARAMETER Branch
+  Only workflows running on this branch may obtain an Azure token. Works on every GitHub plan.
+
+.PARAMETER Environment
+  Alternative to -Branch: trust a GitHub *environment* instead (lets you require a manual approval before deploy).
+  Environments on private repositories need a paid GitHub plan, so the default is the branch.
+
+.PARAMETER SetGitHubVariables
+  Also store the three non-secret ids as repository variables with the GitHub CLI (`gh` must be logged in).
+#>
+param(
+    [string]$GitHubRepo = 'MCyjo/payflow',
+    [string]$AppName = 'payflow-github-actions',
+    [string]$Branch = 'main',
+    [string]$Environment,
+    [string]$StateResourceGroup = 'rg-payflow-tfstate',
+    [switch]$SetGitHubVariables
+)
+
+$ErrorActionPreference = 'Stop'
+
+# $ErrorActionPreference does not cover native programs, so every az call goes through this wrapper.
+function Invoke-Az {
+    $output = & az @args
+    if ($LASTEXITCODE -ne 0) { throw "'az $($args -join ' ')' failed with exit code $LASTEXITCODE." }
+    $output
+}
+
+# Idempotent: creating an assignment that already exists is an error in some az versions.
+function Add-RoleIfMissing {
+    param([string]$ObjectId, [string]$PrincipalType, [string]$Role, [string]$Scope)
+    $existing = Invoke-Az role assignment list --assignee $ObjectId --role $Role --scope $Scope --query '[].id' -o tsv
+    if (-not $existing) {
+        Invoke-Az role assignment create --assignee-object-id $ObjectId --assignee-principal-type $PrincipalType `
+            --role $Role --scope $Scope -o none
+    }
+}
+
+$account = Invoke-Az account show -o json | ConvertFrom-Json
+$subscriptionId = $account.id
+$tenantId = $account.tenantId
+Write-Host "Azure account : $($account.user.name)"
+Write-Host "Subscription  : $($account.name) ($subscriptionId)  state=$($account.state)"
+Write-Host "GitHub repo   : $GitHubRepo"
+if ($account.state -ne 'Enabled') {
+    throw "The subscription is '$($account.state)', not 'Enabled'. Fix that first (see the portal, Subscriptions)."
+}
+$answer = Read-Host 'Is this YOUR personal subscription (not your employer''s)? Type yes to continue'
+if ($answer -ne 'yes') { throw 'Aborted. Run `az login` with the right account and try again.' }
+
+$subject = if ($Environment) { "repo:${GitHubRepo}:environment:$Environment" } else { "repo:${GitHubRepo}:ref:refs/heads/$Branch" }
+
+# --- app registration + service principal (idempotent: reuse when it already exists) ---------------------------
+$appId = Invoke-Az ad app list --display-name $AppName --query '[0].appId' -o tsv
+if (-not $appId) { $appId = Invoke-Az ad app create --display-name $AppName --query appId -o tsv }
+$spId = Invoke-Az ad sp list --filter "appId eq '$appId'" --query '[0].id' -o tsv
+if (-not $spId) { $spId = Invoke-Az ad sp create --id $appId --query id -o tsv }
+
+# --- the trust: "tokens from this repo, on this branch/environment, may act as this app" -----------------------
+$existing = Invoke-Az ad app federated-credential list --id $appId --query "[?subject=='$subject'].name" -o tsv
+if (-not $existing) {
+    $body = @{
+        name      = 'github-actions'
+        issuer    = 'https://token.actions.githubusercontent.com'
+        subject   = $subject
+        audiences = @('api://AzureADTokenExchange')
+    } | ConvertTo-Json -Compress
+    $file = [System.IO.Path]::GetTempFileName()
+    try {
+        # No BOM: some az versions refuse to parse JSON that starts with one.
+        [System.IO.File]::WriteAllText($file, $body, (New-Object System.Text.UTF8Encoding $false))
+        Invoke-Az ad app federated-credential create --id $appId --parameters "@$file" -o none
+    }
+    finally { Remove-Item $file -ErrorAction SilentlyContinue }
+}
+
+# --- permissions ---------------------------------------------------------------------------------------------
+# Terraform creates resources (Contributor) and role assignments for the workload identities (User Access
+# Administrator). That is broad: acceptable for a disposable personal demo subscription, split it in production.
+$scope = "/subscriptions/$subscriptionId"
+foreach ($role in 'Contributor', 'User Access Administrator') {
+    Add-RoleIfMissing -ObjectId $spId -PrincipalType ServicePrincipal -Role $role -Scope $scope
+}
+
+$stateStorage = Invoke-Az storage account list --resource-group $StateResourceGroup --query '[0].id' -o tsv
+if ($stateStorage) {
+    Add-RoleIfMissing -ObjectId $spId -PrincipalType ServicePrincipal -Role 'Storage Blob Data Contributor' -Scope $stateStorage
+}
+else {
+    Write-Warning "No storage account in ${StateResourceGroup}: run bootstrap-state.ps1 first, then re-run this script."
+}
+
+Write-Host ''
+Write-Host 'Done. These three values are identifiers, not secrets:'
+Write-Host "  AZURE_CLIENT_ID       = $appId"
+Write-Host "  AZURE_TENANT_ID       = $tenantId"
+Write-Host "  AZURE_SUBSCRIPTION_ID = $subscriptionId"
+Write-Host "Trusted GitHub context : $subject"
+
+if ($SetGitHubVariables) {
+    gh variable set AZURE_CLIENT_ID --body $appId --repo $GitHubRepo
+    gh variable set AZURE_TENANT_ID --body $tenantId --repo $GitHubRepo
+    gh variable set AZURE_SUBSCRIPTION_ID --body $subscriptionId --repo $GitHubRepo
+    Write-Host "Stored as repository variables in $GitHubRepo."
+}

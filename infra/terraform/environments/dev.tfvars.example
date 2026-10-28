@@ -1,5 +1,6 @@
 # Copy to dev.tfvars (git-ignored) and fill in. Never commit real values.
 subscription_id = "00000000-0000-0000-0000-000000000000"
 
-location   = "westeurope"
+location   = "swedencentral"
 deploy_aks = false # flip to true for a working session, back to false afterwards (AKS is the expensive part)
+# postgres_location = "northeurope"  # set when the main region has no Burstable capacity (RegionalAllocationFailed)

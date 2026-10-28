@@ -24,6 +24,21 @@ terraform {
 provider "azurerm" {
   subscription_id = var.subscription_id
 
+  # A new subscription has most resource providers unregistered, and the provider only registers a core set by
+  # default. Without these the first apply fails with MissingSubscriptionRegistration.
+  resource_provider_registrations = "core"
+  resource_providers_to_register = [
+    "Microsoft.ServiceBus",
+    "Microsoft.DBforPostgreSQL",
+    "Microsoft.KeyVault",
+    "Microsoft.ContainerRegistry",
+    "Microsoft.ContainerService",
+    "Microsoft.OperationalInsights",
+    "Microsoft.Insights",
+    "Microsoft.Web",
+    "Microsoft.ManagedIdentity",
+  ]
+
   features {
     key_vault {
       # Lets `terraform destroy` followed by `apply` reuse names without waiting out the soft-delete period.

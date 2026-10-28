@@ -24,16 +24,16 @@ az login
 ./infra/scripts/bootstrap-state.ps1                    # state storage account + infra/terraform/backend.hcl
 cd infra/terraform
 cp environments/dev.tfvars.example dev.tfvars          # put your subscription id in it
-terraform init -backend-config=backend.hcl
+terraform init "-backend-config=backend.hcl"
 ```
 
 ## Working session (and what it costs)
 
 ```powershell
-terraform apply -var-file=dev.tfvars -var deploy_aks=true     # AKS is ~30 USD/month, so only for a session
+terraform apply "-var-file=dev.tfvars" -var deploy_aks=true     # AKS is ~30 USD/month, so only for a session
 # ... build, deploy, test, take screenshots ...
-terraform apply -var-file=dev.tfvars -var deploy_aks=false    # removes the cluster, keeps everything else
-terraform destroy -var-file=dev.tfvars                        # removes everything
+terraform apply "-var-file=dev.tfvars" -var deploy_aks=false    # removes the cluster, keeps everything else
+terraform destroy "-var-file=dev.tfvars"                        # removes everything
 ```
 
 Without AKS the monthly cost is mostly PostgreSQL (free for 12 months on a new account) and the registry (~5 USD).
@@ -72,18 +72,23 @@ kubectl -n payflow port-forward svc/order-service 8080:80
 curl -X POST localhost:8080/api/orders -H "Content-Type: application/json" -d '{"customerId":"<guid>","amount":10,"currency":"EUR","paymentToken":"tok_success"}'
 ```
 
-## Things to verify after the first `apply`
+## Lessons from the first real `apply`
 
-These behave as documented but could not be exercised without an Azure subscription:
+Things that only showed up against a real subscription (all fixed in this repository):
 
-- **Subscription filters.** Terraform replaces each subscription's default accept-all rule through an ARM
-  deployment. Confirm with
-  `az servicebus topic subscription rule list -g <rg> --namespace-name <ns> --topic-name domain-events --subscription-name payment-service`:
-  there must be exactly one rule, `$Default`, with a SQL filter and not `1=1`.
-- **Function runtime.** The Function App uses `dotnet_version = "10.0"` on a Linux Consumption plan. If the region or
-  provider version rejects that combination, switch to the Flex Consumption plan.
-- **Region capacity.** `westeurope` is the default; pick another region if the PostgreSQL SKU or the AKS node size
-  is unavailable for your subscription (`terraform apply` reports it immediately).
+- **Region restrictions.** A new subscription is refused in some regions (`westeurope` answered "not accepting new customers"),
+  so the default is `swedencentral`. `bootstrap-state.ps1` tries several regions on its own.
+- **Capacity is not visible in `plan`.** PostgreSQL Burstable returned `RegionalAllocationFailed` in `swedencentral`, so the
+  database has its own `postgres_location` (`northeurope` here). A failed allocation also reserves the server name in that
+  region, which is why the name carries a region-keyed suffix.
+- **Subscription filters.** Service Bus gives each subscription a built-in `$Default` rule that accepts everything, and
+  dropping it by *replacing* it (ARM deployment, `az ... rule update`) removes it and leaves the subscription with no rules,
+  so it receives nothing. Adding a rule with a different name removes `$Default` by itself, which is what Terraform does
+  now. Check with `az servicebus topic subscription rule list ...`: each filtered subscription must show `by-event-type`.
+- **Function runtime.** `dotnet 10.0` on a Linux Consumption plan was accepted (`DOTNET-ISOLATED|10.0`).
+- **Corporate TLS inspection** breaks `az` data-plane calls and Docker image builds on a managed laptop; ARM calls and
+  Terraform work. Scripts therefore use control-plane commands where one exists.
+- **Windows PowerShell 5.1** splits `-backend-config=backend.hcl` at the dot: quote such arguments.
 
 ## Deliberate simplifications (and the production answer)
 
