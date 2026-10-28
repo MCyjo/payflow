@@ -1,0 +1,6 @@
+# Copy to backend.hcl (git-ignored). Values come from scripts/bootstrap-state.ps1.
+resource_group_name  = "rg-payflow-tfstate"
+storage_account_name = "stpayflowtfstateXXXX"
+container_name       = "tfstate"
+key                  = "payflow-dev.tfstate"
+use_azuread_auth     = true

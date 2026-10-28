@@ -1,0 +1,12 @@
+# Render and apply (values come from `terraform output`, see deploy/README.md):
+#   kubectl kustomize deploy/kubernetes | envsubst | kubectl apply -f -
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: payflow
+resources:
+  - namespace.yaml
+  - serviceaccounts.yaml
+  - secretproviderclasses.yaml
+  - order-service.yaml
+  - payment-service.yaml
+  - provider-simulator.yaml

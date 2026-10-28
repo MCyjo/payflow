@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: provider-simulator
+  namespace: payflow
+  labels: { app: provider-simulator }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: provider-simulator }
+  template:
+    metadata:
+      labels:
+        app: provider-simulator
+        azure.workload.identity/use: "true"   # injects the federated token the SDKs exchange for an Entra ID token
+    spec:
+      serviceAccountName: provider-simulator
+      terminationGracePeriodSeconds: 45       # > the 30 s host shutdown timeout: in-flight messages finish first
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: provider-simulator
+          image: ${ACR_LOGIN_SERVER}/payflow/provider-simulator:${IMAGE_TAG}
+          ports:
+            - containerPort: 8080
+          env:
+            - { name: ASPNETCORE_ENVIRONMENT, value: Production }
+            - { name: Simulator__WebhookUrl, value: http://payment-service/api/webhooks/payment }
+          envFrom:
+            - secretRef: { name: provider-simulator-secrets }
+          startupProbe:
+            httpGet: { path: /health/live, port: 8080 }
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:                        # process only: a database outage must not restart the pod
+            httpGet: { path: /health/live, port: 8080 }
+            periodSeconds: 10
+          readinessProbe:                       # dependencies: take the pod out of the Service while the database is down
+            httpGet: { path: /health/ready, port: 8080 }
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: secrets, mountPath: /mnt/secrets, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes: { secretProviderClass: provider-simulator }
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: provider-simulator
+  namespace: payflow
+spec:
+  selector: { app: provider-simulator }
+  ports:
+    - { port: 80, targetPort: 8080 }

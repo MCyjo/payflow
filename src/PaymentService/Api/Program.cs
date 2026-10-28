@@ -19,9 +19,10 @@ var app = builder.Build();
 
 app.UseExceptionHandler();
 
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
 {
-    // Dev convenience only. In Azure, migrations run as a separate deployment step.
+    // Convenient for a demo (and safe with several replicas: EF takes a database lock while migrating).
+    // In production run migrations as a separate deployment step instead and leave the flag off.
     await using var scope = app.Services.CreateAsyncScope();
     await scope.ServiceProvider.GetRequiredService<PaymentDbContext>().Database.MigrateAsync();
 }

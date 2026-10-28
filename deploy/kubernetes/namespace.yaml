@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: payflow
+  labels:
+    # Pods that are not non-root / unprivileged / seccomp-confined are rejected by the API server.
+    pod-security.kubernetes.io/enforce: restricted

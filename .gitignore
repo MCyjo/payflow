@@ -12,3 +12,6 @@ local.settings.json
 TestResults/
 *.out
 *.err
+
+# Terraform
+backend.hcl

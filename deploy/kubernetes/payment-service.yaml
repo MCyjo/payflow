@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-service
+  namespace: payflow
+  labels: { app: payment-service }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: payment-service }
+  template:
+    metadata:
+      labels:
+        app: payment-service
+        azure.workload.identity/use: "true"   # injects the federated token the SDKs exchange for an Entra ID token
+    spec:
+      serviceAccountName: payment-service
+      terminationGracePeriodSeconds: 45       # > the 30 s host shutdown timeout: in-flight messages finish first
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: payment-service
+          image: ${ACR_LOGIN_SERVER}/payflow/payment-service:${IMAGE_TAG}
+          ports:
+            - containerPort: 8080
+          env:
+            - { name: ASPNETCORE_ENVIRONMENT, value: Production }
+            - { name: ServiceBus__FullyQualifiedNamespace, value: "${SERVICE_BUS_FQDN}" }
+            - { name: ServiceBus__MaxDeliveryCount, value: "5" }
+            - { name: PaymentProvider__BaseUrl, value: http://provider-simulator }
+            - { name: Database__MigrateOnStartup, value: "true" }
+          envFrom:
+            - secretRef: { name: payment-service-secrets }
+          startupProbe:
+            httpGet: { path: /health/live, port: 8080 }
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:                        # process only: a database outage must not restart the pod
+            httpGet: { path: /health/live, port: 8080 }
+            periodSeconds: 10
+          readinessProbe:                       # dependencies: take the pod out of the Service while the database is down
+            httpGet: { path: /health/ready, port: 8080 }
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: secrets, mountPath: /mnt/secrets, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes: { secretProviderClass: payment-service }
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment-service
+  namespace: payflow
+spec:
+  selector: { app: payment-service }
+  ports:
+    - { port: 80, targetPort: 8080 }

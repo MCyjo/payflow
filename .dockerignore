@@ -1,0 +1,15 @@
+**/bin/
+**/obj/
+**/.vs/
+**/.git/
+.git/
+.github/
+tests/
+tools/
+infra/
+docs/
+deploy/
+*.md
+.env
+**/local.settings.json
+**/appsettings.Development.json

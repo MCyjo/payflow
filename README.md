@@ -128,6 +128,11 @@ The integration tests target the failure modes, not just the happy path:
 - **End to end:** every simulator token through the real broker, plus a poison message (dead-lettered at once) and a
   duplicate `OrderCreated` with a new `MessageId` (not charged twice).
 
+### Azure deployment
+
+Terraform (`infra/terraform`), one Dockerfile and Kubernetes manifests with Key Vault CSI and workload identity.
+See [deploy/README.md](deploy/README.md) for the runbook, what it costs, and what to verify after the first `apply`.
+
 ### Order lifecycle
 
 `POST /api/orders` -> `OrderCreated` (outbox) -> Payment Service charges the provider -> `PaymentCompleted` /
