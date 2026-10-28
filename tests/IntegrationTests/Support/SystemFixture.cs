@@ -1,3 +1,4 @@
+using System.Net.Http.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -67,6 +68,29 @@ public sealed class SystemFixture : IAsyncLifetime
         _ = _simulator.CreateClient();          // builds the host
         Payment = _payment.CreateClient();      // applies migrations, starts the Service Bus consumer + outbox relay
         Order = _order.CreateClient();
+
+        await WarmUpAsync();
+    }
+
+    private sealed record OrderStatusDto(Guid Id, string Status);
+
+    /// <summary>
+    /// Pushes one order through the whole pipeline before any test runs. The first message after a cold start (emulator
+    /// warming up, JIT-cold services, consumers still attaching) can take over a minute on a small CI runner, and that
+    /// latency says nothing about the behaviour the tests are written to check. A real failure still surfaces here,
+    /// with a message that names the cause.
+    /// </summary>
+    private async Task WarmUpAsync()
+    {
+        using var created = await Order.PostAsJsonAsync("/api/orders",
+            new { customerId = Guid.NewGuid(), amount = 1m, currency = "EUR", paymentToken = "tok_success" });
+        created.EnsureSuccessStatusCode();
+        var orderId = (await created.Content.ReadFromJsonAsync<OrderStatusDto>())!.Id;
+
+        await Poll.UntilAsync(
+            async () => (await Order.GetFromJsonAsync<OrderStatusDto>($"/api/orders/{orderId}"))!.Status == "Confirmed",
+            "the warm-up order to be confirmed (cold start of the emulator and the services)",
+            timeoutSeconds: 240);
     }
 
     public async Task DisposeAsync()
