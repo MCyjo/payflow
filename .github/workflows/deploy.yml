@@ -1,0 +1,144 @@
+name: Deploy
+
+# Manual on purpose: this changes a real Azure environment. Only runs on main, because the Azure identity trusts
+# tokens issued for that branch only (see infra/scripts/setup-github-oidc.ps1).
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # lets the job request a GitHub OIDC token to sign in to Azure: no stored secret
+
+env:
+  RESOURCE_GROUP: rg-payflow-dev
+  AKS_NAME: aks-payflow-dev
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      acr_name: ${{ steps.infra.outputs.acr_name }}
+      acr_login_server: ${{ steps.infra.outputs.acr_login_server }}
+      key_vault_name: ${{ steps.infra.outputs.key_vault_name }}
+      service_bus_fqdn: ${{ steps.infra.outputs.service_bus_fqdn }}
+      tenant_id: ${{ steps.infra.outputs.tenant_id }}
+      order_client_id: ${{ steps.infra.outputs.order_client_id }}
+      payment_client_id: ${{ steps.infra.outputs.payment_client_id }}
+      simulator_client_id: ${{ steps.infra.outputs.simulator_client_id }}
+    steps:
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # Terraform owns the infrastructure; the pipeline only reads what it created, by resource group.
+      - name: Discover infrastructure
+        id: infra
+        run: |
+          acr_name=$(az acr list -g "$RESOURCE_GROUP" --query '[0].name' -o tsv)
+          {
+            echo "acr_name=$acr_name"
+            echo "acr_login_server=$(az acr show -n "$acr_name" --query loginServer -o tsv)"
+            echo "key_vault_name=$(az keyvault list -g "$RESOURCE_GROUP" --query '[0].name' -o tsv)"
+            echo "service_bus_fqdn=$(az servicebus namespace list -g "$RESOURCE_GROUP" --query '[0].name' -o tsv).servicebus.windows.net"
+            echo "tenant_id=$(az account show --query tenantId -o tsv)"
+            echo "order_client_id=$(az identity list -g "$RESOURCE_GROUP" --query "[?starts_with(name,'id-order-service-')].clientId | [0]" -o tsv)"
+            echo "payment_client_id=$(az identity list -g "$RESOURCE_GROUP" --query "[?starts_with(name,'id-payment-service-')].clientId | [0]" -o tsv)"
+            echo "simulator_client_id=$(az identity list -g "$RESOURCE_GROUP" --query "[?starts_with(name,'id-provider-simulator-')].clientId | [0]" -o tsv)"
+          } | tee -a "$GITHUB_OUTPUT"
+
+  images:
+    needs: discover
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [order-service, payment-service, provider-simulator]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign in to the registry
+        run: az acr login --name "${{ needs.discover.outputs.acr_name }}"
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build and push ${{ matrix.service }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          target: ${{ matrix.service }}
+          push: true
+          tags: ${{ needs.discover.outputs.acr_login_server }}/payflow/${{ matrix.service }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+  deploy:
+    needs: [discover, images]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Connect to the cluster
+        run: az aks get-credentials --resource-group "$RESOURCE_GROUP" --name "$AKS_NAME" --admin --overwrite-existing
+
+      - name: Apply manifests
+        env:
+          ACR_LOGIN_SERVER: ${{ needs.discover.outputs.acr_login_server }}
+          IMAGE_TAG: ${{ github.sha }}
+          KEY_VAULT_NAME: ${{ needs.discover.outputs.key_vault_name }}
+          SERVICE_BUS_FQDN: ${{ needs.discover.outputs.service_bus_fqdn }}
+          TENANT_ID: ${{ needs.discover.outputs.tenant_id }}
+          ORDER_SERVICE_CLIENT_ID: ${{ needs.discover.outputs.order_client_id }}
+          PAYMENT_SERVICE_CLIENT_ID: ${{ needs.discover.outputs.payment_client_id }}
+          PROVIDER_SIMULATOR_CLIENT_ID: ${{ needs.discover.outputs.simulator_client_id }}
+        run: |
+          # Substitute only the known placeholders so nothing else in the manifests is touched.
+          # shellcheck disable=SC2016  # the literal ${NAME} list is what envsubst expects
+          kubectl kustomize deploy/kubernetes | envsubst '${ACR_LOGIN_SERVER} ${IMAGE_TAG} ${KEY_VAULT_NAME} ${SERVICE_BUS_FQDN} ${TENANT_ID} ${ORDER_SERVICE_CLIENT_ID} ${PAYMENT_SERVICE_CLIENT_ID} ${PROVIDER_SIMULATOR_CLIENT_ID}' | kubectl apply -f -
+
+      - name: Wait for the rollout
+        run: |
+          for deployment in provider-simulator payment-service order-service; do
+            kubectl -n payflow rollout status "deployment/$deployment" --timeout=300s
+          done
+
+      # The proof that matters: an order placed through the real API in the cluster ends up confirmed, which needs
+      # Postgres, Service Bus (workload identity), the outbox relay, the payment service and the provider to all work.
+      - name: Smoke test
+        run: |
+          kubectl -n payflow port-forward svc/order-service 8080:80 >/dev/null 2>&1 &
+          sleep 5
+          body='{"customerId":"3f0c7f5e-5b53-4a64-9c5d-0f4c5f7a1a11","amount":10,"currency":"EUR","paymentToken":"tok_success"}'
+          id=$(curl -sf -X POST localhost:8080/api/orders -H 'Content-Type: application/json' -d "$body" | jq -r .id)
+          echo "order $id"
+          for _ in $(seq 1 45); do
+            status=$(curl -sf "localhost:8080/api/orders/$id" | jq -r .status)
+            echo "status: $status"
+            [ "$status" = "Confirmed" ] && exit 0
+            sleep 2
+          done
+          kubectl -n payflow get pods
+          kubectl -n payflow logs deployment/order-service --tail=40
+          kubectl -n payflow logs deployment/payment-service --tail=40
+          exit 1

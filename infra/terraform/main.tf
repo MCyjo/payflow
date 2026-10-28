@@ -119,3 +119,12 @@ module "functions" {
   app_insights_connection_string = module.observability.connection_string
   tags                           = local.tags
 }
+
+# Contributor (granted to the pipeline identity at subscription level) cannot push images: that is a data-plane action.
+resource "azurerm_role_assignment" "github_acr_push" {
+  count = var.github_actions_principal_id == null ? 0 : 1
+
+  scope                = azurerm_container_registry.this.id
+  role_definition_name = "AcrPush"
+  principal_id         = var.github_actions_principal_id
+}

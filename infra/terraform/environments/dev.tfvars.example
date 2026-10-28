@@ -4,3 +4,7 @@ subscription_id = "00000000-0000-0000-0000-000000000000"
 location   = "swedencentral"
 deploy_aks = false # flip to true for a working session, back to false afterwards (AKS is the expensive part)
 # postgres_location = "northeurope"  # set when the main region has no Burstable capacity (RegionalAllocationFailed)
+
+# Object id of the service principal GitHub Actions uses (printed by `az ad sp show --id <AZURE_CLIENT_ID> --query id -o tsv`).
+# Grants it AcrPush so the deploy workflow can push images.
+github_actions_principal_id = "00000000-0000-0000-0000-000000000000"

@@ -41,6 +41,18 @@ Set a budget with alerts before the first `apply`.
 
 ## Deploy the services
 
+### Through GitHub Actions (recommended)
+
+Images are built in CI because a managed laptop that re-signs TLS cannot restore NuGet packages inside a container. The
+workflow signs in to Azure with OIDC, builds and pushes the three images tagged with the commit, applies the manifests
+and ends with a smoke test that places a real order through the cluster and waits for it to be confirmed:
+
+```bash
+gh workflow run deploy.yml --ref main
+```
+
+### By hand
+
 ```powershell
 $env:ACR = terraform output -raw acr_name
 az acr login --name $env:ACR

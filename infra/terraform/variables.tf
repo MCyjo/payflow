@@ -32,9 +32,9 @@ variable "deploy_aks" {
 }
 
 variable "aks_node_vm_size" {
-  description = "VM size of the single AKS node. Must be available in the region and within the subscription's vCPU quota."
+  description = "VM size of the single AKS node (needs >= 2 vCPU and 4 GB). On a new subscription the cheap burstable sizes are often restricted (Standard_B2s) or out of capacity in the only region that allows VMs (AllocationFailed for Standard_B2als_v2 in swedencentral), so the default is Standard_D2ls_v5, the size Azure itself suggested. Check availability with: az vm list-skus --location <region> --size Standard_D2 --resource-type virtualMachines"
   type        = string
-  default     = "Standard_B2s"
+  default     = "Standard_D2ls_v5"
 }
 
 variable "postgres_sku" {
@@ -60,6 +60,12 @@ variable "postgres_location" {
     Region for PostgreSQL only; defaults to `location`. Burstable SKUs are sometimes out of capacity in a region
     (RegionalAllocationFailed), and the database can live elsewhere at the cost of a little cross-region latency.
   EOT
+  type        = string
+  default     = null
+}
+
+variable "github_actions_principal_id" {
+  description = "Object id of the service principal GitHub Actions signs in as (see infra/scripts/setup-github-oidc.ps1). It is granted AcrPush so the pipeline can push images; null skips the assignment."
   type        = string
   default     = null
 }
