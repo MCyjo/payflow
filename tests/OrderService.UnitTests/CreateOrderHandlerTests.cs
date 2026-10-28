@@ -11,6 +11,7 @@ public class CreateOrderHandlerTests
         public List<Order> Orders { get; } = [];
         public List<(IDomainEvent Event, string CorrelationId)> Outbox { get; } = [];
         public int Saves { get; private set; }
+        public Order? ConcurrentWinner { get; set; }
         public string CorrelationId => "corr-1";
 
         public Task<Order?> GetAsync(Guid id, CancellationToken ct) =>
@@ -24,6 +25,14 @@ public class CreateOrderHandlerTests
 
         public Task SaveChangesAsync(CancellationToken ct)
         {
+            if (ConcurrentWinner is not null)
+            {
+                // Another request committed the same Idempotency-Key first; our own writes roll back.
+                Orders.Clear();
+                Outbox.Clear();
+                Orders.Add(ConcurrentWinner);
+                throw new UniqueConstraintViolationException("duplicate key");
+            }
             Saves++;
             return Task.CompletedTask;
         }
@@ -63,6 +72,20 @@ public class CreateOrderHandlerTests
         Assert.Equal(first.Order.Id, second.Order.Id);
         Assert.Single(store.Orders);
         Assert.Single(store.Outbox);
+    }
+
+    [Fact]
+    public async Task Handle_ConcurrentRequestWithSameKeyWinsRace_ReturnsWinnersOrderInsteadOfFailing()
+    {
+        var winner = Order.Create(Guid.NewGuid(), 10m, "EUR", DateTimeOffset.UtcNow, "key-1");
+        var store = new FakeStore { ConcurrentWinner = winner };
+
+        var (dto, created) = await Handler(store).HandleAsync(
+            new CreateOrderCommand(Guid.NewGuid(), 10m, "EUR", "tok_success", "key-1"), CancellationToken.None);
+
+        Assert.False(created);
+        Assert.Equal(winner.Id, dto.Id);
+        Assert.Empty(store.Outbox); // the loser must not publish a second OrderCreated
     }
 
     [Fact]

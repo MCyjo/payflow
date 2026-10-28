@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="PayFlow.Messaging.UnitTests" />
+    <InternalsVisibleTo Include="PayFlow.IntegrationTests" />
   </ItemGroup>
 
 </Project>

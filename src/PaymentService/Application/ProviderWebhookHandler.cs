@@ -5,7 +5,7 @@ namespace PayFlow.PaymentService.Application;
 
 public sealed record ProviderWebhook(Guid PaymentId, string Status, string? ProviderReference, string? Reason);
 
-public enum WebhookResult { Applied, Duplicate, NotFound, Rejected }
+public enum WebhookResult { Applied, Duplicate, NotFound, Rejected, Conflict }
 
 /// <summary>
 /// Applies the provider's asynchronous result. Providers retry webhooks and may deliver them out of order,
@@ -54,7 +54,12 @@ public sealed class ProviderWebhookHandler(
             return WebhookResult.Rejected; // e.g. "failed" arriving for an already completed payment
         }
 
-        await uow.SaveChangesAsync(ct);
+        try { await uow.SaveChangesAsync(ct); }
+        catch (ConcurrencyConflictException)
+        {
+            // A concurrent delivery of the same webhook won. Ask the provider to retry; the retry sees the final state.
+            return WebhookResult.Conflict;
+        }
         return WebhookResult.Applied;
     }
 }

@@ -21,6 +21,8 @@ public sealed class OrderDbContext(DbContextOptions<OrderDbContext> options) : D
             e.Property(x => x.IdempotencyKey).HasMaxLength(100);
             e.HasIndex(x => x.IdempotencyKey).IsUnique();   // NULLs are distinct in PostgreSQL
             e.HasIndex(x => x.CustomerId);
+            // PostgreSQL system column used as optimistic concurrency token: a stale write fails instead of overwriting.
+            e.Property<uint>("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
         });
 
         modelBuilder.AddMessagingTables();

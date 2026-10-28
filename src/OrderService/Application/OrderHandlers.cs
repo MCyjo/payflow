@@ -38,7 +38,19 @@ public sealed class CreateOrderHandler(
             new OrderCreated(Guid.NewGuid(), now, order.Id, order.CustomerId, order.Amount, order.Currency, cmd.PaymentToken),
             correlation.CorrelationId);
 
-        await uow.SaveChangesAsync(ct);
+        try
+        {
+            await uow.SaveChangesAsync(ct);
+        }
+        catch (UniqueConstraintViolationException) when (cmd.IdempotencyKey is not null)
+        {
+            // A concurrent request with the same key committed first. Nothing of ours was saved
+            // (order and outbox event roll back together), so answer with the winner's order.
+            var winner = await orders.GetByIdempotencyKeyAsync(cmd.IdempotencyKey, ct);
+            if (winner is not null) return (winner.ToDto(), false);
+            throw;
+        }
+
         return (order.ToDto(), true);
     }
 }
@@ -61,7 +73,8 @@ public sealed class CancelOrderHandler(IOrderRepository orders, IUnitOfWork uow,
         try { order.Cancel(clock.GetUtcNow()); }
         catch (DomainException) { return CancelResult.Conflict; }
 
-        await uow.SaveChangesAsync(ct);
+        try { await uow.SaveChangesAsync(ct); }
+        catch (ConcurrencyConflictException) { return CancelResult.Conflict; } // e.g. the payment result won the race
         return CancelResult.Cancelled;
     }
 }

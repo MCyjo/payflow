@@ -37,6 +37,12 @@
     <Project Path="src/PaymentService/Infrastructure/PayFlow.PaymentService.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/tests/" />
+  <Folder Name="/tests/ArchitectureTests/">
+    <Project Path="tests/ArchitectureTests/PayFlow.ArchitectureTests.csproj" />
+  </Folder>
+  <Folder Name="/tests/IntegrationTests/">
+    <Project Path="tests/IntegrationTests/PayFlow.IntegrationTests.csproj" />
+  </Folder>
   <Folder Name="/tests/Messaging.UnitTests/">
     <Project Path="tests/Messaging.UnitTests/PayFlow.Messaging.UnitTests.csproj" />
   </Folder>

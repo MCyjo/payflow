@@ -64,6 +64,7 @@ app.MapPost("/api/webhooks/payment", async (HttpRequest request, ProviderWebhook
     {
         WebhookResult.Applied or WebhookResult.Duplicate => Results.Ok(),   // 2xx stops the provider's retries
         WebhookResult.NotFound => Results.NotFound(),
+        WebhookResult.Conflict => Results.Conflict(),
         _ => Results.UnprocessableEntity()
     };
 });

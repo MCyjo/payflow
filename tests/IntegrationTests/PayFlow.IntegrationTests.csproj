@@ -1,0 +1,44 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.14" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="Npgsql" Version="10.0.3" />
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.16.0" />
+    <PackageReference Include="Testcontainers.ServiceBus" Version="4.16.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\OrderService\Api\PayFlow.OrderService.Api.csproj" />
+    <ProjectReference Include="..\..\src\OrderService\Application\PayFlow.OrderService.Application.csproj" />
+    <ProjectReference Include="..\..\src\OrderService\Infrastructure\PayFlow.OrderService.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\PaymentService\Api\PayFlow.PaymentService.Api.csproj" />
+    <ProjectReference Include="..\..\src\PaymentService\Application\PayFlow.PaymentService.Application.csproj" />
+    <ProjectReference Include="..\..\src\PaymentService\Infrastructure\PayFlow.PaymentService.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\PaymentService\Domain\PayFlow.PaymentService.Domain.csproj" />
+    <ProjectReference Include="..\..\src\OrderService\Domain\PayFlow.OrderService.Domain.csproj" />
+    <ProjectReference Include="..\..\src\PaymentProviderSimulator\PayFlow.PaymentProviderSimulator.csproj" />
+    <ProjectReference Include="..\..\src\PayFlow.Messaging\PayFlow.Messaging.csproj" />
+    <ProjectReference Include="..\..\src\PayFlow.Contracts\PayFlow.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="../../docker/servicebus-config.json" Link="servicebus-config.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

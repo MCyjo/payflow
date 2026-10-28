@@ -40,3 +40,11 @@ public interface IPaymentProvider
     /// <exception cref="ProviderUnavailableException">The provider could not be reached or kept failing.</exception>
     Task<ChargeResult> ChargeAsync(ChargeRequest request, CancellationToken ct);
 }
+
+/// <summary>The row changed since it was loaded (optimistic concurrency). The caller should retry later.</summary>
+public sealed class ConcurrencyConflictException : Exception
+{
+    public ConcurrencyConflictException() { }
+    public ConcurrencyConflictException(string message) : base(message) { }
+    public ConcurrencyConflictException(string message, Exception innerException) : base(message, innerException) { }
+}

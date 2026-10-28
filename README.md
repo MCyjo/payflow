@@ -102,6 +102,32 @@ dotnet run --project tools/PayFlow.DlqTool -- purge payment-service
 Resubmit keeps the original `MessageId`, so consumers' inbox tables recognise anything they already handled
 (`--new-id` overrides this when still inside the topic's duplicate-detection window).
 
+### Tests
+
+```bash
+dotnet test PayFlow.slnx                       # everything (integration tests need Docker running)
+dotnet test tests/ArchitectureTests            # no Docker needed
+```
+
+| Project | What it proves |
+|---|---|
+| `*.UnitTests` | domain rules, handlers, idempotency logic, trace-context propagation |
+| `ArchitectureTests` (NetArchTest) | layers only depend inwards, services never reference each other, events are immutable |
+| `IntegrationTests` | real PostgreSQL + the real Service Bus emulator via Testcontainers |
+
+The integration tests target the failure modes, not just the happy path:
+
+- **Outbox:** order and event commit atomically; a failed publish is retried and the error recorded; a crash after
+  sending re-publishes with the *same* `MessageId`; two relay replicas publish every message exactly once (`SKIP LOCKED`).
+- **Idempotency:** 20 parallel requests with one `Idempotency-Key` create one order and one event; ten messages or
+  ten webhooks for the same payment produce one charge and one `PaymentCompleted`.
+- **Concurrency:** a stale writer loses (`xmin` optimistic concurrency) instead of overwriting, so a late payment
+  result cannot resurrect a cancelled order.
+- **Provider resilience:** the real HTTP client against the simulator over loopback: retries on 5xx, per-attempt and
+  total timeouts for a hung provider, provider-side idempotency.
+- **End to end:** every simulator token through the real broker, plus a poison message (dead-lettered at once) and a
+  duplicate `OrderCreated` with a new `MessageId` (not charged twice).
+
 ### Order lifecycle
 
 `POST /api/orders` -> `OrderCreated` (outbox) -> Payment Service charges the provider -> `PaymentCompleted` /

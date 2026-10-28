@@ -23,6 +23,7 @@ public sealed class PaymentDbContext(DbContextOptions<PaymentDbContext> options)
             e.Property(x => x.ProviderReference).HasMaxLength(100);
             e.Property(x => x.FailureReason).HasMaxLength(500);
             e.HasIndex(x => x.OrderId).IsUnique();   // one payment per order, enforced by the database
+            e.Property<uint>("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
         });
 
         modelBuilder.AddMessagingTables();
@@ -44,5 +45,15 @@ internal sealed class PaymentRepository(PaymentDbContext db) : IPaymentRepositor
 /// <summary>SaveChanges is one DB transaction: payment state, inbox record and outbox event commit together.</summary>
 internal sealed class EfUnitOfWork(PaymentDbContext db) : IUnitOfWork
 {
-    public Task SaveChangesAsync(CancellationToken ct) => db.SaveChangesAsync(ct);
+    public async Task SaveChangesAsync(CancellationToken ct)
+    {
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            throw new ConcurrencyConflictException("The payment was modified concurrently.", ex);
+        }
+    }
 }
