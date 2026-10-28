@@ -10,6 +10,12 @@ updates:
         patterns: ["Azure.*", "Microsoft.Azure.*"]
       ef-core:
         patterns: ["Microsoft.EntityFrameworkCore*", "Npgsql*"]
+      # Test tooling moves in lockstep across every test project: one pull request, one CI run, no merge conflicts.
+      test-tooling:
+        patterns: ["Microsoft.NET.Test.Sdk", "xunit*"]
+    ignore:
+      # Not used (it only came with the xunit template and nothing collects coverage); removed from the test projects.
+      - dependency-name: "coverlet.collector"
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly }

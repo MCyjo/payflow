@@ -7,7 +7,9 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Superseded pull request runs are cancelled to save minutes. On main every commit keeps its own result,
+  # otherwise merging several pull requests in a row cancels the earlier runs and leaves them without a verdict.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
