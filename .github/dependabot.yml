@@ -19,3 +19,8 @@ updates:
   - package-ecosystem: terraform
     directory: /infra/terraform
     schedule: { interval: weekly }
+    ignore:
+      # azurerm 5 is a breaking upgrade (for example AKS now requires node_provisioning_profile). Migrate it as a
+      # deliberate change verified with a real plan, not through a bot pull request.
+      - dependency-name: "hashicorp/azurerm"
+        update-types: ["version-update:semver-major"]
