@@ -1,0 +1,59 @@
+name: Deploy functions
+
+# Deploys the notification and audit functions to the Azure Function App. Separate from the Kubernetes deployment so a
+# code change in a function does not rebuild images or touch the cluster. Manual, and only from main (the Azure
+# identity trusts tokens issued for that branch only).
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-functions
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  RESOURCE_GROUP: rg-payflow-dev
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Publish
+        run: dotnet publish src/NotificationFunction --configuration Release --output publish
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Find the Function App
+        id: app
+        run: echo "name=$(az functionapp list -g "$RESOURCE_GROUP" --query '[0].name' -o tsv)" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Deploy
+        uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ steps.app.outputs.name }}
+          package: publish
+
+      # The host registers the triggers a moment after the package starts, so poll instead of checking once.
+      - name: Verify the functions are registered
+        run: |
+          for _ in $(seq 1 24); do
+            functions=$(az functionapp function list -g "$RESOURCE_GROUP" -n "${{ steps.app.outputs.name }}" --query '[].name' -o tsv | tr '\n' ' ')
+            echo "registered: ${functions:-none yet}"
+            if [[ "$functions" == *PaymentNotificationFunction* && "$functions" == *AuditFunction* ]]; then exit 0; fi
+            sleep 10
+          done
+          exit 1
