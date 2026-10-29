@@ -30,13 +30,14 @@ terraform init "-backend-config=backend.hcl"
 ## Working session (and what it costs)
 
 ```powershell
-terraform apply "-var-file=dev.tfvars" -var deploy_aks=true     # AKS is ~30 USD/month, so only for a session
+terraform apply "-var-file=dev.tfvars" -var deploy_aks=true     # AKS adds about 2.2 USD a day, so only for a session
 # ... build, deploy, test, take screenshots ...
 terraform apply "-var-file=dev.tfvars" -var deploy_aks=false    # removes the cluster, keeps everything else
 terraform destroy "-var-file=dev.tfvars"                        # removes everything
 ```
 
-Without AKS the monthly cost is mostly PostgreSQL (free for 12 months on a new account) and the registry (~5 USD).
+Without AKS the environment costs roughly 1 USD a day (an estimate from list prices, not an invoice): PostgreSQL about 0.4, Service Bus Standard about 0.3,
+the registry about 0.17. The AKS node (`Standard_D2ls_v5`, 0.091 USD/h) adds about 2.2 USD a day. A budget with alerts is set before the first `apply`.
 Set a budget with alerts before the first `apply`.
 
 ## Deploy the services
@@ -97,9 +98,20 @@ Things that only showed up against a real subscription (all fixed in this reposi
   dropping it by *replacing* it (ARM deployment, `az ... rule update`) removes it and leaves the subscription with no rules,
   so it receives nothing. Adding a rule with a different name removes `$Default` by itself, which is what Terraform does
   now. Check with `az servicebus topic subscription rule list ...`: each filtered subscription must show `by-event-type`.
+- **VM sizes are restricted and sometimes out of capacity.** `Standard_B2s` is blocked for a new subscription, and `Standard_B2als_v2` returned
+  `AllocationFailed` in the only region where VMs were allowed at all (`swedencentral`), leaving a half-created cluster that had to be deleted by hand
+  (it held vCPU quota and its name). The node is now `Standard_D2ls_v5`, the size Azure suggested. Scan regions and sizes with `az vm list-skus`.
+- **GitHub OIDC subject.** This repository presents `repo:OWNER@ownerId/NAME@repoId:ref:...` (immutable ids), so trusting `repo:OWNER/NAME` failed with
+  `AADSTS700213`. `setup-github-oidc.ps1` now asks GitHub for the prefix.
+- **Probe paths.** The manifests probe `/health/live` and `/health/ready`; the provider simulator only had `/health`, so the cluster restarted it
+  forever (HTTP 404). A regression test covers it.
+- **Telemetry cost.** The outbox relay polls once a second per replica, and every poll became a span and an event: about 40,500 records an hour, which used the
+  0.5 GB daily Log Analytics cap in about 11 hours, after which the workspace **stopped ingesting anything** (`OverQuota`). The cap did its job as a guard
+  rail, but it also hid everything that happened afterwards, including any logs from the function app. Polling spans are now filtered out; the resulting volume is not yet measured.
+- **Function host on Flex Consumption.** Deployment reports success, but the host answers 502, lists only `WarmUp` and does not consume messages. Cause unknown; the next step is the portal log stream.
 - **Function runtime.** ARM accepted `dotnet 10.0` on a Linux Consumption plan (`DOTNET-ISOLATED|10.0`), but the platform cannot run it: .NET 10
   is not supported on Linux Consumption, and deploying failed with "Sync Trigger ... malformed content". Acceptance of a setting is not proof
-  that it works. The Function App is now on Flex Consumption (`azurerm_function_app_flex_consumption`), the plan Microsoft recommends.
+  that it works. The Function App is now on Flex Consumption (`azurerm_function_app_flex_consumption`), the plan Microsoft recommends (but see the open problem above).
 - **Corporate TLS inspection** breaks `az` data-plane calls and Docker image builds on a managed laptop; ARM calls and
   Terraform work. Scripts therefore use control-plane commands where one exists.
 - **Windows PowerShell 5.1** splits `-backend-config=backend.hcl` at the dot: quote such arguments.
