@@ -46,6 +46,7 @@ jobs:
         with:
           app-name: ${{ steps.app.outputs.name }}
           package: publish
+          sku: flexconsumption # Flex Consumption deploys through a different API than the classic plans
 
       # The host registers the triggers a moment after the package starts, so poll instead of checking once.
       - name: Verify the functions are registered

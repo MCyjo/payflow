@@ -14,7 +14,7 @@ Terraform is your Azure login, pods authenticate with workload identity, and eve
 | Container Registry (Basic) | admin user disabled |
 | Application Insights + Log Analytics | workspace-based, **0.5 GB/day ingestion cap** |
 | User-assigned identities | one per workload, least-privilege roles (Service Bus sender/receiver, Key Vault reader) |
-| Function App (Consumption) | system identity, receives from Service Bus without a connection string |
+| Function App (Flex Consumption) | system identity, receives from Service Bus without a connection string. `dotnet 10` is not supported on Linux Consumption |
 | AKS (optional, `deploy_aks`) | Free tier, one node, OIDC issuer + workload identity, Key Vault CSI driver |
 
 ## One-time setup
@@ -97,7 +97,9 @@ Things that only showed up against a real subscription (all fixed in this reposi
   dropping it by *replacing* it (ARM deployment, `az ... rule update`) removes it and leaves the subscription with no rules,
   so it receives nothing. Adding a rule with a different name removes `$Default` by itself, which is what Terraform does
   now. Check with `az servicebus topic subscription rule list ...`: each filtered subscription must show `by-event-type`.
-- **Function runtime.** `dotnet 10.0` on a Linux Consumption plan was accepted (`DOTNET-ISOLATED|10.0`).
+- **Function runtime.** ARM accepted `dotnet 10.0` on a Linux Consumption plan (`DOTNET-ISOLATED|10.0`), but the platform cannot run it: .NET 10
+  is not supported on Linux Consumption, and deploying failed with "Sync Trigger ... malformed content". Acceptance of a setting is not proof
+  that it works. The Function App is now on Flex Consumption (`azurerm_function_app_flex_consumption`), the plan Microsoft recommends.
 - **Corporate TLS inspection** breaks `az` data-plane calls and Docker image builds on a managed laptop; ARM calls and
   Terraform work. Scripts therefore use control-plane commands where one exists.
 - **Windows PowerShell 5.1** splits `-backend-config=backend.hcl` at the dot: quote such arguments.
