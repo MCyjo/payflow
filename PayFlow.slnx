@@ -55,6 +55,9 @@
   <Folder Name="/tests/PaymentService.UnitTests/">
     <Project Path="tests/PaymentService.UnitTests/PayFlow.PaymentService.UnitTests.csproj" />
   </Folder>
+  <Folder Name="/tests/ServiceDefaults.UnitTests/">
+    <Project Path="tests/ServiceDefaults.UnitTests/PayFlow.ServiceDefaults.UnitTests.csproj" />
+  </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/PayFlow.DlqTool/PayFlow.DlqTool.csproj" />
   </Folder>

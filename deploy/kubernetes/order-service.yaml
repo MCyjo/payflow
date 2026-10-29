@@ -26,6 +26,7 @@ spec:
             - containerPort: 8080
           env:
             - { name: ASPNETCORE_ENVIRONMENT, value: Production }
+            - { name: Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command, value: Warning }
             - { name: ServiceBus__FullyQualifiedNamespace, value: "${SERVICE_BUS_FQDN}" }
             - { name: Database__MigrateOnStartup, value: "true" }
           envFrom:

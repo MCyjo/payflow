@@ -24,4 +24,8 @@
     <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" Version="1.20.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="PayFlow.ServiceDefaults.UnitTests" />
+  </ItemGroup>
+
 </Project>

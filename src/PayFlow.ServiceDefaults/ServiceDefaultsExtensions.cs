@@ -47,7 +47,8 @@ public static class ServiceDefaultsExtensions
                     o.Filter = ctx => !ctx.Request.Path.StartsWithSegments("/health", StringComparison.OrdinalIgnoreCase))
                 .AddHttpClientInstrumentation()
                 .AddSource("Npgsql") // built-in Npgsql tracing: one span per DB command
-                .AddSource(TelemetryNames.MessagingSource))
+                .AddSource(TelemetryNames.MessagingSource)
+                .AddProcessor(new OutboxPollFilterProcessor()))
             .WithMetrics(m => m
                 .AddAspNetCoreInstrumentation()
                 .AddHttpClientInstrumentation()
