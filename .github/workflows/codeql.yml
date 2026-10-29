@@ -15,7 +15,7 @@ jobs:
     # Code scanning on a private repository needs GitHub Advanced Security (paid). It is free on public
     # repositories, so this job simply starts running once the repository is made public.
     if: github.repository_visibility == 'public'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       security-events: write

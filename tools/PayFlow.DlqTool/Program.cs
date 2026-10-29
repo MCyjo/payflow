@@ -1,4 +1,4 @@
-﻿using Azure.Identity;
+using Azure.Identity;
 using Azure.Messaging.ServiceBus;
 using PayFlow.Contracts;
 using PayFlow.DlqTool;

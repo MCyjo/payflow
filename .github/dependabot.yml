@@ -19,6 +19,10 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly }
+    groups:
+      # One pull request for all action updates instead of one per action.
+      github-actions:
+        patterns: ["*"]
   - package-ecosystem: docker
     directory: /deploy/docker
     schedule: { interval: weekly }
