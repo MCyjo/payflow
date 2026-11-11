@@ -4,7 +4,7 @@
 #   docker build -f deploy/docker/Dockerfile --target provider-simulator -t payflow/provider-simulator .
 # BuildKit only builds the stages a target depends on, so each build publishes just its own service.
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS restore
+FROM mcr.microsoft.com/dotnet/sdk:11.0 AS restore
 WORKDIR /src
 COPY nuget.config global.json Directory.Build.props ./
 COPY src/ src/
